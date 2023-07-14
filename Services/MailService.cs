@@ -18,40 +18,36 @@ using System.Text;
 using System.Globalization;
 using System.Net.Mime;
 using Microsoft.Extensions.Logging;
+using WebApi.Services.Interfaces;
+using WebApi.Helpers.Enum;
+using WebApi.Models.Messaging;
+using WebApi.Repositories.Interfaces;
+using System.Net;
 
 namespace WebApi.Services
 {
-    public enum MailLabels : int
-    {
-        ASSET_LOAN = 0,
-        ASSET_VERIFICATION = 1,
-        ASSET_SERVICING = 2,
-        ASSET_LOST_DAMAGED = 3,
-        ASSET_DONATED = 4,
-        ASSET_TRANSFER = 5,
-        OTHERS = 6
-    };
-
-    public interface IMailService
-    {
-        Mail CreateResendMail(Mail originMail, List<MailAttachment> originMailAttachments);
-    }
-
     public class MailService : IMailService, IDisposable
     {
+        // Service Layer only handle business logic and data access or entry should handle seperatly in db layer
+        // Service layer will retrieve or entry to db via Repository layer
+        // using DB object or DB activity in Controller or Service layer will make the code hard to extensible later like if we need to use another db provider
+        //by Seprating Repo layer , we can implement DB related logic inside its own layer even if we use another db via Common Interface
+
         // Flag: Has Dispose already been called?
         bool disposed = false;
         // Instantiate a SafeHandle instance.
         SafeHandle handle = new SafeFileHandle(IntPtr.Zero, true);
-        private DataContext _context;
+        private IMailRepository _mailRepository;
+        private IMailAttachmentRepository _attachmentRepository;
         private readonly AppSettings _appSettings;
         private ILogger _log;
 
-        public MailService(DataContext context, IOptions<AppSettings> appSettings, ILogger<MailService> log)
+        public MailService(ILogger<MailService> log,DataContext context, IOptions<AppSettings> appSettings, IMailRepository mailRepository, IMailAttachmentRepository attachmentRepository)
         {
-            _context = context;
-            _appSettings = appSettings.Value;
             _log = log;
+            _appSettings = appSettings.Value;
+            _mailRepository = mailRepository;
+            _attachmentRepository = attachmentRepository;
         }
 
         // Public implementation of Dispose pattern callable by consumers.
@@ -72,13 +68,13 @@ namespace WebApi.Services
             {
                 handle.Dispose();
                 // Free any other managed objects here.
-                //
-                _context.Dispose();
             }
 
             disposed = true;
         }
 
+        // should also rewirte this , Database Entity should only be used by data read or write purpose
+        // it will be better if we implement Mail sending function in Model class, it also has necesssary information to create and send a mail
         public Mail CreateResendMail(Mail originMail, List<MailAttachment> originMailAttachments)
         {
             Mail newMail = new Mail();
@@ -103,8 +99,7 @@ namespace WebApi.Services
             // using var transaction = _context.Database.BeginTransaction();
             // try
             // { 
-            AddtoDB(newMail);
-            CommittoDB(newMail);
+            _mailRepository.AddMailToDB(newMail);
 
             if (newMail.HasAttachments)
             {
@@ -123,8 +118,8 @@ namespace WebApi.Services
                     newMailAttachments.Add(mailAttachment);
                 }
             }
+            _attachmentRepository.AddMailAttachmentRangeToDB(newMailAttachments);
 
-            CommittoDB(newMailAttachments);
                 // transaction.Commit();
             // }
             // catch (Exception ex)
@@ -134,129 +129,101 @@ namespace WebApi.Services
 
             return newMail;
         }
-
-        private void AddtoDB(Mail newMail, DataContext _context)
+        public async Task<InternalResponse<PagedMailModel>> GetPagedMailsByFolderIDAsync(int folder, int userId, int currentPage, int rowsPerPage)
         {
-            try
+            //validation before doing any db query
+            if (!CheckMailFolder((MailFolder)folder))
             {
-                _context.Mail.Add(newMail);
-                return;
+                return new InternalResponse<PagedMailModel>() 
+                { 
+                    status = false,
+                    statusCode = HttpStatusCode.BadRequest,
+                    message = "email folder not found!",
+                    Value = null };
             }
-            //XL add to catch Database update Exception
-            catch (DbUpdateException ex)
-            {
+            var mailTotalCount = await _mailRepository.GetMailTotalCountAsync((MailFolder)folder, userId);
+            var pagedMails = await _mailRepository.GetPagedMailsByFolderAsync((MailFolder)folder,userId,currentPage,rowsPerPage);
 
-                throw new AppException(ex.InnerException.Message);
-            }
-            catch (AppException ex)
+            return new InternalResponse<PagedMailModel>() 
+            { 
+                status = true, 
+                statusCode = HttpStatusCode.OK, 
+                Value = new PagedMailModel
+                {
+                    pageNumber = currentPage,
+                    rowsOfPage = rowsPerPage,
+                    totalRows = mailTotalCount,
+                    results = pagedMails
+                }
+            };
+        }
+        public async Task<InternalResponse<IEnumerable<MailModel>>> GetAllMailsByLabelAsync(int label, int userId)
+        {
+            if (!CheckMailLabel((MailLabels)label))
             {
-                // return error message if there was an exception
-                throw new AppException(ex.Message);
+                return new InternalResponse<IEnumerable<MailModel>>()
+                {
+                    status = false,
+                    statusCode = HttpStatusCode.BadRequest,
+                    message = "mail label not found!",
+                    Value = null
+                };
+
+            }
+            var mailsByLabel = await _mailRepository.GetAllMailsByLabelAsync((MailLabels)label, userId);
+            return new InternalResponse<IEnumerable<MailModel>>()
+            {
+                status = true,
+                statusCode = HttpStatusCode.OK,
+                Value = mailsByLabel
+            };
+        }
+        public async Task<InternalResponse<IEnumerable<MailModel>>> GetAllMailsByFolderAsync(int folder, int userId)
+        {
+            if (!CheckMailFolder((MailFolder)folder))
+            {
+                return new InternalResponse<IEnumerable<MailModel>>()
+                {
+                    status = false,
+                    statusCode = HttpStatusCode.BadRequest,
+                    message = "mail folder not found!",
+                    Value = null
+                };
+
+            }
+            var mailsByLabel = await _mailRepository.GetAllMailsByFolderAsync((MailFolder)folder, userId);
+            return new InternalResponse<IEnumerable<MailModel>>()
+            {
+                status = true,
+                statusCode = HttpStatusCode.OK,
+                Value = mailsByLabel
+            };
+        }
+        private bool CheckMailLabel(MailLabels label)
+        {
+            switch (label)
+            {
+                case MailLabels.ASSET_LOAN: return true;
+                case MailLabels.ASSET_VERIFICATION: return true;
+                case MailLabels.ASSET_SERVICING: return true;
+                case MailLabels.ASSET_LOST_DAMAGED: return true;
+                case MailLabels.ASSET_DONATED: return true;
+                case MailLabels.ASSET_TRANSFER: return true;
+                case MailLabels.OTHERS: return true;
+                default: return false;
             }
         }
 
-        private void AddtoDB(Mail newMail)
+        private bool CheckMailFolder(MailFolder folder)
         {
-            try
+            switch (folder)
             {
-                _context.Mail.Add(newMail);
-                return;
-            }
-            //XL add to catch Database update Exception
-            catch (DbUpdateException ex)
-            {
-
-                throw new AppException(ex.InnerException.Message);
-            }
-            catch (AppException ex)
-            {
-                // return error message if there was an exception
-                throw new AppException(ex.Message);
+                case MailFolder.Sent: return true;
+                case MailFolder.Receive: return true;
+                default: return false;
             }
         }
 
-        private void CommittoDB(IEnumerable<MailAttachment> newMailAttachments)
-        {
-            try
-            {
-                _context.MailAttachments.AddRange(newMailAttachments);
-                _context.SaveChanges();
-                return;
-            }
-            //XL add to catch Database update Exception
-            catch (DbUpdateException ex)
-            {
-
-                throw new AppException(ex.InnerException.Message);
-            }
-            catch (AppException ex)
-            {
-                // return error message if there was an exception
-                throw new AppException(ex.Message);
-            }
-        }
-
-        private void AddtoDB(MailAttachment newMailAttachment)
-        {
-            try
-            {
-                _context.MailAttachments.Add(newMailAttachment);
-                return;
-            }
-            //XL add to catch Database update Exception
-            catch (DbUpdateException ex)
-            {
-
-                throw new AppException(ex.InnerException.Message);
-            }
-            catch (AppException ex)
-            {
-                // return error message if there was an exception
-                throw new AppException(ex.Message);
-            }
-        }
-
-        private void CommittoDB(Object obj)
-        {
-            try
-            {
-                _context.Entry(obj).State = EntityState.Added;
-                _context.SaveChanges();
-                return;
-            }
-            //XL add to catch Database update Exception
-            catch (DbUpdateException ex)
-            {
-
-                throw new AppException(ex.InnerException.Message);
-            }
-            catch (AppException ex)
-            {
-                // return error message if there was an exception
-                throw new AppException(ex.Message);
-            }
-        }
-
-        // Zack DB-Refactor
-        private void DbTracking(object obj, DataContext _context)
-        {
-            try 
-            {
-                _context.Entry(obj).State = EntityState.Added;
-                return;
-            }
-            //XL add to catch Database update Exception
-            catch (DbUpdateException ex)
-            {
-
-                throw new AppException(ex.InnerException.Message);
-            }
-            catch (AppException ex)
-            {
-                // return error message if there was an exception
-                throw new AppException(ex.Message);
-            }
-        }
-
+       
     }
 }

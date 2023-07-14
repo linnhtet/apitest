@@ -64,6 +64,7 @@ namespace WebApi.Helpers
             modelBuilder.Entity<BusinessAreaJoinCostCenter>().HasNoKey();
             // add unique constraint
             modelBuilder.Entity<BusinessAreaJoinCostCenter>().HasIndex(p => new { p.BusinessAreaID, p.CostCenterID }).IsUnique();
+
         }
     }
 }

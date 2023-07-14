@@ -33,7 +33,6 @@ namespace WebApi.Controllers
         SafeHandle handle = new SafeFileHandle(IntPtr.Zero, true);
         readonly Disposable _disposable;
         private IUserService _userService;
-        private IMailService _mailService;
         private IMapper _mapper;
         private readonly AppSettings _appSettings;
         private DataContext _context;
@@ -44,13 +43,11 @@ namespace WebApi.Controllers
 
         public UsersController(
             IUserService userService,
-            IMailService mailService,
             IMapper mapper,
             IOptions<AppSettings> appSettings,
             DataContext context)
         {
             _userService = userService;
-            _mailService = mailService;
             _mapper = mapper;
             _appSettings = appSettings.Value;
             _context = context;
@@ -133,20 +130,7 @@ namespace WebApi.Controllers
                 _userService.UpdateLastLogin(user.UserID, true, now);
             }
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
-                    new Claim(ClaimTypes.Name, user.UserID.ToString()),
-                    new Claim(CustomClaimTypes.AMSSessionID, sessionID.ToString())
-                }),
-                Expires = DateTime.UtcNow.AddDays(1),
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
+            var token = TokenHelper.GenerateToken(sessionID.ToString(), user, _appSettings.Secret,_appSettings.TokenExpiration);
 
             // get saved toggle columns for various modules (for now used by Reports module only)
             IEnumerable<ToggleColsModel> allToggleCols = _userService.GetUserSavedToggleColumns(user.UserID);
@@ -207,7 +191,7 @@ namespace WebApi.Controllers
 
                 Reports_AssetDetailsSavedFilters = Reports_AssetDetailsSavedFilters,
 
-                Token = tokenString
+                Token = token
             });
         }
 

@@ -1,28 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
-using Microsoft.EntityFrameworkCore;
-using System.Linq;
-using Microsoft.AspNetCore.Mvc;
+﻿using Autofac.Util;
 using AutoMapper;
-using System.IdentityModel.Tokens.Jwt;
-using WebApi.Helpers;
-using Microsoft.Extensions.Options;
-using System.Text;
-using Microsoft.IdentityModel.Tokens;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using WebApi.Services;
-using WebApi.Entities;
-using WebApi.Models.Users;
-using Microsoft.Win32.SafeHandles;
-using System.Runtime.InteropServices;
-using Autofac.Util;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
-using System.ComponentModel;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System.Net.Mail;
-using System.IO;
-using WebApi.Models.Messaging;
+using Microsoft.Extensions.Options;
+using Microsoft.Win32.SafeHandles;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using WebApi.Entities;
+using WebApi.Helpers;
+using WebApi.Services;
+using WebApi.Services.Interfaces;
 
 namespace WebApi.Controllers
 {
@@ -194,6 +186,8 @@ namespace WebApi.Controllers
         [HttpGet("folderData/{paramFolderId}/{pageNumber}/{rowsOfPage}")]
         public IActionResult GetSentFolder(int paramFolderId, int pageNumber, int rowsOfPage)
         {
+            return NoContent();
+            //
             // TODO: Complete the implementation of pagination functionality
         }
     }

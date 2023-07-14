@@ -3,6 +3,7 @@ namespace WebApi.Helpers
     public class AppSettings
     {
         public string Secret { get; set; }
+        public int TokenExpiration { get; set; }    
         public string EmailServerHost { get; set; }
         public string EmailViaSSL { get; set; }
         public string EmailPort { get; set; }

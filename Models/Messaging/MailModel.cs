@@ -35,13 +35,4 @@ namespace WebApi.Models.Messaging
         public int Folder { get; set; }
     }
 
-    //MH
-    public class MailsPageObj
-    {
-        public IEnumerable<MailModel> results { get; set; }
-        public int totalRows { get; set; }
-        public int pageNumber { get; set; }
-        public int rowsOfPage { get; set; }
-    }
-
 }

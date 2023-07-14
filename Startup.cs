@@ -16,6 +16,9 @@ using System.Linq;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using WebApi.Services.Interfaces;
+using WebApi.Repositories.Interfaces;
+using WebApi.Repositories;
 
 namespace WebApi
 {
@@ -101,7 +104,8 @@ namespace WebApi
             services.AddScoped<IBusinessAreaService, BusinessAreaService>();
 
             services.AddScoped<IMailService, MailService>();
-
+            services.AddScoped<IMailRepository, MailRepository>();
+            services.AddScoped<IMailAttachmentRepository, MailAttachmentRepository>();
             services.AddScoped<ILocationService, LocationService>();
 
 
